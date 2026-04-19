@@ -139,8 +139,10 @@ internal static class OpenApiOptionsExtensions
     {
         options.AddOperationTransformer((operation, context, cancellationToken) =>
         {
-            var apiDescription = context.Description;
-            operation.Deprecated |= apiDescription.IsDeprecated();
+            operation.Deprecated |= context.Description.ActionDescriptor.EndpointMetadata
+                .OfType<ObsoleteAttribute>()
+                .Any();
+
             return Task.CompletedTask;
         });
         return options;
@@ -154,17 +156,13 @@ internal static class OpenApiOptionsExtensions
             var apiVersionParameter = operation.Parameters?.FirstOrDefault(p => p.Name == "api-version");
             if (apiVersionParameter is not null)
             {
-                apiVersionParameter.Description = "The API version, in the format 'major.minor'.";
+                // Fix up the API version parameter description and example
+                // apiVersionParameter.Description = "The API version, in the format 'major.minor'.";
                 if (apiVersionParameter.Schema is OpenApiSchema targetSchema)
                 {
-                    switch (context.DocumentName) {
-                        case "v1":
-                            targetSchema.Example = JsonNode.Parse("\"1.0\"");
-                            break;
-                        case "v2":
-                            targetSchema.Example = JsonNode.Parse("\"2.0\"");
-                            break;
-                    }
+                    // Set the example to the default value and then clear the default
+                    targetSchema.Example = targetSchema.Default;
+                    targetSchema.Default = null;
                 }
             }
             return Task.CompletedTask;
@@ -199,7 +197,7 @@ internal static class OpenApiOptionsExtensions
                 }
             };
             document.Components ??= new();
-            document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();  
+            document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
             document.Components.SecuritySchemes.Add("oauth2", securityScheme);
             return Task.CompletedTask;
         }
